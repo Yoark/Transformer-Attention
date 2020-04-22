@@ -1,0 +1,11 @@
+# torch is not available via pip
+
+# Need to install TorchText from fork for new features
+git+git://github.com/kolloldas/text.git
+numpy
+tqdm
+
+# Tests
+pytest
+pytest-mock
+pytest-pythonpath
