@@ -90,7 +90,8 @@ class MultiHeadAttention(nn.Module):
         
         # Combine queries and keys
         logits = torch.matmul(queries, keys.permute(0, 1, 3, 2))
-        
+        #! This supposed to be the attention of multihead attention, haha
+        #!  save it here, pass it out
         # Add bias to mask future values
         if self.bias_mask is not None:
             logits += self.bias_mask[:, :, :logits.shape[-2], :logits.shape[-1]].type_as(logits.data)
@@ -111,7 +112,7 @@ class MultiHeadAttention(nn.Module):
         # Linear to get output
         outputs = self.output_linear(contexts)
         
-        return outputs
+        return outputs, weights, self.bias_mask
 
 class Conv(nn.Module):
     """
