@@ -112,7 +112,9 @@ class MultiHeadAttention(nn.Module):
         # Linear to get output
         outputs = self.output_linear(contexts)
         
-        return outputs, weights, self.bias_mask
+        # return outputs, weights, self.bias_mask
+
+        return outputs 
 
 class Conv(nn.Module):
     """

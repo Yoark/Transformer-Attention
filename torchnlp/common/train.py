@@ -183,7 +183,7 @@ class Trainer(object):
             for batch in prog_iter:
                 # Train mode
                 self.model.train()
-                import ipdb; ipdb.set_trace()
+                # import ipdb; ipdb.set_trace()
 
                 self.optimizer.zero_grad()
                 loss, _ = self.model.loss(batch)
@@ -236,7 +236,6 @@ class Trainer(object):
                         # The best value has gone outside the desired window
                         # hence stop
                         #! save here, heihei
-                        torch.save(self.)
                         logger.info('Early stopping at iteration {}, epoch {}, {}={:3.5f}'
                                     .format(best_iteration, best_epoch, best_metric_name, best_metric))
                         # Update the file time of that checkpoint file to latest
@@ -284,5 +283,6 @@ class Trainer(object):
 
         logger.info("prediction, and attns for best epoch obtained")
 
+        import ipdb; ipdb.set_trace()
     # def get_attentions(self, md, inp, out):
     #     self.attentions.append(out.cpu().data.numpy())
