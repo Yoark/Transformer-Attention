@@ -243,8 +243,7 @@ class Trainer(object):
                         self.model.set_latest(self.task_name, best_iteration)
                         # ! save the attention for the best model, which make sense
             
-                        catch_attention()
-
+                        self.catch_attention()
                         break
                 
             if save:
@@ -254,7 +253,7 @@ class Trainer(object):
         return best_iteration, all_metrics            
 
             
-    def catch_attention(self, data):
+    def catch_attention(self):
         """Set iteration to generate non-shuffling data. Add hook to 
         the model, run a forward pass, log the attention obtained for best 
         epoch
@@ -263,7 +262,7 @@ class Trainer(object):
             data {[type]} -- [description]
         """
         def get_attentions(md, inp, out):
-            attns.append(out.cpu().data.numpy())
+            attns.append(out[1].cpu().data.numpy())
 
         self.train_iter.shuffle = False
         final_iter = tqdm(self.train_iter, leave=False)
@@ -278,7 +277,7 @@ class Trainer(object):
 
         with torch.no_grad():
             for batch in final_iter:
-                _, predictions = self.model.loss(batch, compute_prediction=True)
+                _, predictions = self.model.loss(batch, compute_predictions=True)
                 outputs.append(predictions.cpu().data.numpy())
 
         logger.info("prediction, and attns for best epoch obtained")

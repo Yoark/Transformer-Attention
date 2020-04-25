@@ -101,7 +101,7 @@ class MultiHeadAttention(nn.Module):
         
         # Dropout
         weights = self.dropout(weights)
-        
+        import ipdb; ipdb.set_trace() 
         # Combine with values to get context
         contexts = torch.matmul(weights, values)
         
@@ -114,7 +114,7 @@ class MultiHeadAttention(nn.Module):
         
         # return outputs, weights, self.bias_mask
 
-        return outputs 
+        return outputs, weights, self.bias_mask
 
 class Conv(nn.Module):
     """
