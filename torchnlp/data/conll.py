@@ -181,6 +181,8 @@ def conll2000_dataset(batch_size, use_local=False, root='.data/conll2000',
                             (train, val, test), batch_size=batch_size, 
                             device=torch.device("cuda:0" if torch.cuda.is_available() else "cpu"))
     train_iter.repeat = False
+    # ! changed here, so you need to make train part to shuffle things.
+    train_iter.shuffle = False
     
     return {
         'task': 'conll2000.chunk',

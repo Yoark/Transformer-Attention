@@ -12,6 +12,7 @@ from .model import gen_model_dir
 import os
 from functools import partial
 from collections import deque, defaultdict
+from torchnlp.modules.transformer.sublayers import MultiHeadAttention
 
 import logging
 logger = logging.getLogger(__name__)
@@ -41,6 +42,9 @@ def compute_num_params(model):
     """
     sizes = [(np.array(p.data.size()).prod(), int(p.requires_grad)) for p in model.parameters()]
     return sum(map(lambda t: t[0]*t[1],sizes)), sum(map(lambda t: t[0]*(1 - t[1]),sizes))
+    
+
+
 
 class Trainer(object):
     """
@@ -82,6 +86,16 @@ class Trainer(object):
             self.optimizer.load_state_dict(torch.load(self.opt_path))
 
         self.lr_scheduler_step = self.lr_scheduler_epoch = None
+        from collections import defaultdict
+
+        # def get_attentions(name, md, inp, out):
+        #     self.attentions.append(out.cpu)
+
+        # if True:
+        #     self.attentions = defaultdict(list)
+        #     for name, m in self.model.named_modules():
+        #         if isinstance(m, MultiHeadAttention):
+        #             m.register_forward_hook(hook=get_attentions)
 
         # Set up learing rate decay scheme
         if hparams.learning_rate_decay is not None:
@@ -157,6 +171,8 @@ class Trainer(object):
 
 
         for epoch in range(num_epochs):
+            # * Allow the training to have shuffling.
+            self.train_iter.shuffle = True
             self.train_iter.init_epoch()
             epoch_loss = 0
             count = 0
@@ -167,6 +183,7 @@ class Trainer(object):
             for batch in prog_iter:
                 # Train mode
                 self.model.train()
+                import ipdb; ipdb.set_trace()
 
                 self.optimizer.zero_grad()
                 loss, _ = self.model.loss(batch)
@@ -218,10 +235,17 @@ class Trainer(object):
                     if tracking[0][1] == best_iteration:
                         # The best value has gone outside the desired window
                         # hence stop
+                        #! save here, heihei
+                        torch.save(self.)
                         logger.info('Early stopping at iteration {}, epoch {}, {}={:3.5f}'
                                     .format(best_iteration, best_epoch, best_metric_name, best_metric))
                         # Update the file time of that checkpoint file to latest
+                        
                         self.model.set_latest(self.task_name, best_iteration)
+                        # ! save the attention for the best model, which make sense
+            
+                        catch_attention()
+
                         break
                 
             if save:
@@ -231,4 +255,34 @@ class Trainer(object):
         return best_iteration, all_metrics            
 
             
-                
+    def catch_attention(self, data):
+        """Set iteration to generate non-shuffling data. Add hook to 
+        the model, run a forward pass, log the attention obtained for best 
+        epoch
+
+        Arguments:
+            data {[type]} -- [description]
+        """
+        def get_attentions(md, inp, out):
+            attns.append(out.cpu().data.numpy())
+
+        self.train_iter.shuffle = False
+        final_iter = tqdm(self.train_iter, leave=False)
+
+        self.attentions = defaultdict(list)
+        for name, m in self.model.named_modules():
+            if isinstance(m, MultiHeadAttention):
+                m.register_forward_hook(hook=get_attentions) 
+
+        attns = []
+        outputs = []
+
+        with torch.no_grad():
+            for batch in final_iter:
+                _, predictions = self.model.loss(batch, compute_prediction=True)
+                outputs.append(predictions.cpu().data.numpy())
+
+        logger.info("prediction, and attns for best epoch obtained")
+
+    # def get_attentions(self, md, inp, out):
+    #     self.attentions.append(out.cpu().data.numpy())

@@ -11,6 +11,8 @@ import math
 
 from .layers import EncoderLayer, DecoderLayer
 from ..normalization import LayerNorm
+from torchnlp.modules.transformer.sublayers import MultiHeadAttention
+from collections import defaultdict
 
 def _gen_bias_mask(max_length):
     """
@@ -91,6 +93,10 @@ class Encoder(nn.Module):
         
         self.layer_norm = LayerNorm(hidden_size)
         self.input_dropout = nn.Dropout(input_dropout)
+        #! add hook here to store attn 
+        # for name, inst in self.enc.named_modules():
+        #     if isinstance(inst, MultiHeadAttention):
+        #         inst.register_forward_hook(hook=hook)
         
     
     def forward(self, inputs):
@@ -172,3 +178,5 @@ class Decoder(nn.Module):
         # Final layer normalization
         y = self.layer_norm(y)
         return y
+
+    
