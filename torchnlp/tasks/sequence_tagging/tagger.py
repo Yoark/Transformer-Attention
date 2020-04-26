@@ -37,6 +37,12 @@ class Tagger(Model):
         """
         super(Tagger, self).__init__(hparams)
 
+        # ! put adversarial sign here
+        self.adversarial = False
+
+        if hparams.adversarial:
+            self.adversarial = True
+
         if vocabs is None or not isinstance(vocabs, tuple) or len(vocabs) != 3:
             raise ValueError('Must provide vocabs 3-tuple')
 
@@ -50,7 +56,7 @@ class Tagger(Model):
         self.vocab_tags = vocab_tags # Needed during eval and prediction
         self.embedding_word = nn.Embedding(len(vocab_word), hparams.embedding_size_word)
         self.embedding_char = None
-
+        # ! as long as I change the embedding_size_char i could delete the char encoding part.
         if vocab_char is not None and hparams.embedding_size_char > 0:
             self.embedding_char = nn.Embedding(len(vocab_char), hparams.embedding_size_char)
         
@@ -74,7 +80,7 @@ class Tagger(Model):
         if self.embedding_char is not None:
             inputs_char_emb = self.embedding_char(batch.inputs_char.view(-1, 
                                                   batch.inputs_char.shape[-1]))
-
+        # import ipdb; ipdb.set_trace()
         return self.compute(inputs_word_emb, inputs_char_emb)
 
     def forward(self, batch):
@@ -100,7 +106,10 @@ class Tagger(Model):
         predictions = None
         if compute_predictions:
             predictions = self.output_layer(hidden)
-
+        if self.adversarial:
+            pass
+            #load predictions, do loss
+            # load attns maybe outsidek
         loss_val = self.output_layer.loss(hidden, batch.labels)
 
         return loss_val, predictions
@@ -158,5 +167,6 @@ def hparams_tagging_base():
         dropout=0.2,
         optimizer_adam_beta1=0.9,
         optimizer_adam_beta2=0.98,
-        use_crf=False
+        use_crf=False,
+        adversarial=False
     )

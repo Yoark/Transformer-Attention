@@ -13,7 +13,9 @@ import os
 from functools import partial
 from collections import deque, defaultdict
 from torchnlp.modules.transformer.sublayers import MultiHeadAttention
-
+import pickle
+import shutil
+import json, codecs
 import logging
 logger = logging.getLogger(__name__)
 
@@ -65,8 +67,9 @@ class Trainer(object):
         self.model = model
         self.hparams = hparams
         self.evaluator = evaluator
-
-        self.train_iter = train_iter
+        self.val_iter = train_iter[1]
+        self.train_iter = train_iter[0]
+        self.test_iter = train_iter[2]
         # Disable repetitions
         self.train_iter.repeat = False
 
@@ -80,7 +83,7 @@ class Trainer(object):
 
         self.opt_path = os.path.join(gen_model_dir(task_name, model.__class__), 
                                     OPTIMIZER_FILE)
-
+        self.file_path = gen_model_dir(task_name, model.__class__)
         # If model is loaded from a checkpoint restore optimizer also
         if int(model.iterations) > 0:
             self.optimizer.load_state_dict(torch.load(self.opt_path))
@@ -172,7 +175,16 @@ class Trainer(object):
 
         for epoch in range(num_epochs):
             # * Allow the training to have shuffling.
-            self.train_iter.shuffle = True
+            # add advsarial flag here
+            #! if self.adversarial:
+            #     self.train_iter.shuffle = False
+            #     # json load attns
+            #     self.train_iter.init_epoch()
+            #     train_batchs = list(self.train_iter)
+            #     tr_batch = [(train_batch, attn_batch) for train_batch, attn_batch in zip(train_batchs, attn_batchs)]
+            #     prog_iter = tr_batch
+
+            self.train_iter.shuffle = False 
             self.train_iter.init_epoch()
             epoch_loss = 0
             count = 0
@@ -180,28 +192,54 @@ class Trainer(object):
             logger.info('Epoch %d (%d)'%(epoch + 1, int(self.model.iterations)))
 
             prog_iter = tqdm(self.train_iter, leave=False)
+
+            #! if self.adversarial:
+            #     self.train_iter.shuffle = False
+            #     # json load attns
+            #     self.train_iter.init_epoch()
+            #     train_batchs = list(self.train_iter)
+            #     tr_batch = [(train_batch, attn_batch) for train_batch, attn_batch in zip(train_batchs, attn_batchs)]
+            #     prog_iter = tr_batch
+
+            self.model.train()
             for batch in prog_iter:
                 # Train mode
-                self.model.train()
-                # import ipdb; ipdb.set_trace()
+                # self.model.train()
+                    # import ipdb; ipdb.set_trace()
+                if not self.adversarial:
+                    self.optimizer.zero_grad()
+                    # if self.adversarial
+                    loss, _ = self.model.loss(batch)
+                    loss.backward()
+                    self.optimizer.step()
 
-                self.optimizer.zero_grad()
-                loss, _ = self.model.loss(batch)
-                loss.backward()
-                self.optimizer.step()
+                    if self.lr_scheduler_step:
+                        self.lr_scheduler_step.step()
 
-                if self.lr_scheduler_step:
-                    self.lr_scheduler_step.step()
+                    epoch_loss += loss.item()
+                    count += 1
+                    self.model.iterations += 1
 
-                epoch_loss += loss.item()
-                count += 1
-                self.model.iterations += 1
+                    # Display loss
+                    prog_iter.set_description('Training')
+                    prog_iter.set_postfix(loss=(epoch_loss/count))
+                else:
+                    self.optimizer.zero_grad()
+                    # # add the other losses here
+                    loss, _ = self.model.loss(batch, batch_attn)
 
-                # Display loss
-                prog_iter.set_description('Training')
-                prog_iter.set_postfix(loss=(epoch_loss/count))
+                    loss = loss
+                    loss.backward()
 
+
+            ####
             
+            # train_at, train_pr = self.catch_attention(self.train_iter)
+            # test_at, test_pr = self.catch_attention(self.test_iter)
+            # import ipdb; ipdb.set_trace()
+            # attentions_tr = [el.tolist() for el in train_at]
+            # attentions_te = [el.tolist() for el in test_at]
+            # ####
             if self.lr_scheduler_epoch:
                 self.lr_scheduler_epoch.step()
 
@@ -210,7 +248,7 @@ class Trainer(object):
             logger.info('Train Loss: {:3.5f}'.format(train_loss))
 
             best_iteration = int(self.model.iterations)
-
+            # import ipdb; ipdb.set_trace()
             # Run evaluation
             if self.evaluator:
                 eval_metrics = self.evaluator.evaluate(self.model)
@@ -242,8 +280,32 @@ class Trainer(object):
                         
                         self.model.set_latest(self.task_name, best_iteration)
                         # ! save the attention for the best model, which make sense
-            
-                        self.catch_attention()
+                          
+                        train_at, train_pr = self.catch_attention(self.train_iter)
+                        test_at, test_pr = self.catch_attention(self.test_iter)
+                        # import ipdb; ipdb.set_trace()
+                        attentions_tr = [el.tolist() for el in train_at]
+                        attentions_te = [el.tolist() for el in test_at]
+                        prediction_tr = [el.tolist() for el in train_pr] 
+                        prediction_te = [el.tolist() for el in test_pr]
+                        print("SAVING PREDICTIONS AND ATTENTIONS")
+                        dirname = os.path.join(self.file_path, 'saved')
+
+                        if not os.path.exists(dirname):
+                            os.makedirs(dirname, mode=0o777)
+                        else:
+                            shutil.rmtree(dirname)
+                            os.makedirs(dirname, mode=0o777)
+                        # import ipdb; ipdb.set_trace()
+
+                        # json.dump(prediction_tr, open(os.path.join(dirname, '/train_predictions_best_epoch.json'), 'w'))
+                        # json.dump(prediction_te, open(os.path.join(dirname, '/test_predictions_best_epoch.json'), 'w'))
+                        # json.dump(attentions_tr, open(os.path.join(dirname, '/train_attentions_best_epoch.json'), 'w'))
+                        # json.dump(attentions_te, open(os.path.join(dirname, '/test_attentions_best_epoch.json'), 'w'))
+                        save_data(prediction_tr, dirname+'/tr_pr_best')
+                        save_data(prediction_te, dirname+'/te_pr_best')
+                        save_data(attentions_tr, dirname+'/tr_attn_best')
+                        save_data(attentions_te, dirname+'/te_attn_best')
                         break
                 
             if save:
@@ -253,7 +315,7 @@ class Trainer(object):
         return best_iteration, all_metrics            
 
             
-    def catch_attention(self):
+    def catch_attention(self, it):
         """Set iteration to generate non-shuffling data. Add hook to 
         the model, run a forward pass, log the attention obtained for best 
         epoch
@@ -264,24 +326,38 @@ class Trainer(object):
         def get_attentions(md, inp, out):
             attns.append(out[1].cpu().data.numpy())
 
-        self.train_iter.shuffle = False
-        final_iter = tqdm(self.train_iter, leave=False)
+        it.shuffle = False
+        it.init_epoch()
+        final_iter = tqdm(it, leave=False)
 
-        self.attentions = defaultdict(list)
+        hooks = []
         for name, m in self.model.named_modules():
             if isinstance(m, MultiHeadAttention):
-                m.register_forward_hook(hook=get_attentions) 
+                hk = m.register_forward_hook(hook=get_attentions) 
+                hooks.append(hk)
 
         attns = []
         outputs = []
 
         with torch.no_grad():
             for batch in final_iter:
-                _, predictions = self.model.loss(batch, compute_predictions=True)
+                #! not need to use model.loss, reduced computation, yay!!!
+                predictions = self.model(batch)
                 outputs.append(predictions.cpu().data.numpy())
 
-        logger.info("prediction, and attns for best epoch obtained")
+        attns = [x for y in attns for x in y]
+        outputs = [x for y in outputs for x in y]
+        # remove hook
+        for hk in hooks:
+            hk.remove()
 
-        import ipdb; ipdb.set_trace()
+        logger.info("prediction, and attns for best epoch obtained, release hook")
+        #! save it somewhere:
+        # try pickle first
+        return attns, outputs
     # def get_attentions(self, md, inp, out):
     #     self.attentions.append(out.cpu().data.numpy())
+def save_data(data, path):
+    with open(path, 'wb') as f:
+        pickle.dump(data, f)
+    print(f'done {path}')

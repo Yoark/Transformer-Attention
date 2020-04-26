@@ -78,6 +78,6 @@ class TransformerTagger(Tagger):
 
         # Apply Transformer Encoder
         enc_out = self.transformer_enc(inputs_word_emb)
-
+        # import ipdb; ipdb.set_trace()
         return enc_out
 

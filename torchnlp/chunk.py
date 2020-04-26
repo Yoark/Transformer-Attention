@@ -46,9 +46,9 @@ conll2000 = partial(conll2000_dataset,
 def hparams_transformer_chunk():
     hparams = hparams_tagging_base()
     return hparams.update(
-        embedding_size_char=16,
+        embedding_size_char=0,
         embedding_size_char_per_word=100,
-        num_hidden_layers=2,
+        num_hidden_layers=1,
         num_heads=4,
         attention_key_channels=0, # Take hidden size
         attention_value_channels=0, # Take hidden size

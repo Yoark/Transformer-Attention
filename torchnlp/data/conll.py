@@ -146,7 +146,7 @@ def conll2000_dataset(batch_size, use_local=False, root='.data/conll2000',
                                     train=train_file,
                                     test=test_file,
                                     fields=tuple(fields))
-
+        # import ipdb; ipdb.set_trace()
         # HACK: Saving the sort key function as the split() call removes it
         sort_key = train.sort_key
         # To make the split deterministic
@@ -161,7 +161,7 @@ def conll2000_dataset(batch_size, use_local=False, root='.data/conll2000',
     else:
         train, val, test = CoNLL2000Chunking.splits(fields=tuple(fields), 
                                                     validation_frac=validation_frac)
-
+    # import ipdb; ipdb.set_trace()
     logger.info('---------- CONLL 2000 Chunking ---------')
     logger.info('Train size: %d'%(len(train)))
     logger.info('Validation size: %d'%(len(val)))
@@ -183,7 +183,7 @@ def conll2000_dataset(batch_size, use_local=False, root='.data/conll2000',
     train_iter.repeat = False
     # ! changed here, so you need to make train part to shuffle things.
     train_iter.shuffle = False
-    
+    # import ipdb; ipdb.set_trace() 
     return {
         'task': 'conll2000.chunk',
         'iters': (train_iter, val_iter, test_iter), 

@@ -69,7 +69,7 @@ def train(task_name, model_cls, dataset_fn, hparams=None, hparams_map=None,
     evaluator = Evaluator(validation_iter, *metrics)
 
     # Setup trainer
-    trainer = Trainer(task_name, model, hparams, train_iter, evaluator)
+    trainer = Trainer(task_name, model, hparams, dataset['iters'], evaluator)
 
     # Start training
     best_cp, _ = trainer.train(num_epochs, early_stopping=early_stopping)

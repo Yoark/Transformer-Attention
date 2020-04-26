@@ -102,13 +102,13 @@ class Encoder(nn.Module):
     def forward(self, inputs):
         #Add input dropout
         x = self.input_dropout(inputs)
-        
+        # import ipdb; ipdb.set_trace() 
         # Project to hidden size
         x = self.embedding_proj(x)
-        
+        # import ipdb; ipdb.set_trace()
         # Add timing signal
         x += self.timing_signal[:, :inputs.shape[1], :].type_as(inputs.data)
-        
+        # import ipdb; ipdb.set_trace()
         y = self.enc(x)
         
         y = self.layer_norm(y)

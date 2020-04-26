@@ -37,9 +37,9 @@ class EncoderLayer(nn.Module):
         
         self.multi_head_attention = MultiHeadAttention(hidden_size, total_key_depth, total_value_depth, 
                                                        hidden_size, num_heads, bias_mask, attention_dropout)
-        
+        # ! Here I want to have linear + relu + linear 
         self.positionwise_feed_forward = PositionwiseFeedForward(hidden_size, filter_size, hidden_size,
-                                                                 layer_config='cc', padding = 'both', 
+                                                                 layer_config='ll', padding = 'both', 
                                                                  dropout=relu_dropout)
         self.dropout = nn.Dropout(layer_dropout)
         self.layer_norm_mha = LayerNorm(hidden_size)
@@ -47,7 +47,7 @@ class EncoderLayer(nn.Module):
         
     def forward(self, inputs):
         x = inputs
-        
+        # import ipdb; ipdb.set_trace() 
         # Layer Normalization
         x_norm = self.layer_norm_mha(x)
         
@@ -55,6 +55,7 @@ class EncoderLayer(nn.Module):
         # y, attn, bias_mask = self.multi_head_attention(x_norm, x_norm, x_norm)
         
         y, attn, bias_mask = self.multi_head_attention(x_norm, x_norm, x_norm)
+        # import ipdb; ipdb.set_trace()
         # Dropout and residual
         x = self.dropout(x + y)
         

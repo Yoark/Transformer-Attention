@@ -83,7 +83,9 @@ class MultiHeadAttention(nn.Module):
         # Split into multiple heads
         queries = self._split_heads(queries)
         keys = self._split_heads(keys)
+
         values = self._split_heads(values)
+        # import ipdb; ipdb.set_trace()
         
         # Scale queries
         queries *= self.query_scale
@@ -101,7 +103,7 @@ class MultiHeadAttention(nn.Module):
         
         # Dropout
         weights = self.dropout(weights)
-        import ipdb; ipdb.set_trace() 
+        # import ipdb; ipdb.set_trace() 
         # Combine with values to get context
         contexts = torch.matmul(weights, values)
         
@@ -111,7 +113,7 @@ class MultiHeadAttention(nn.Module):
         
         # Linear to get output
         outputs = self.output_linear(contexts)
-        
+    
         # return outputs, weights, self.bias_mask
 
         return outputs, weights, self.bias_mask
