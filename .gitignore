@@ -15,3 +15,5 @@ prefs.json
 .data/
 chunking*/
 *.zip
+attns/
+saved/

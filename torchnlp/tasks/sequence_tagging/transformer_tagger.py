@@ -10,7 +10,9 @@ from torchnlp.common.hparams import HParams
 from torchnlp.modules import transformer
 
 from .tagger import Tagger, hparams_tagging_base
-
+from torchnlp.data.conll import load_pickle
+import os
+# device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 class TransformerTagger(Tagger):
     """
     Sequence tagger using the Transformer network (https://arxiv.org/pdf/1706.03762.pdf)
@@ -58,6 +60,20 @@ class TransformerTagger(Tagger):
                                     hparams.relu_dropout,
                                     use_mask=False
                                 )
+        # ! Look
+        self.adversarial = False
+
+        if hparams.adversarial:
+            self.adversarial = True
+            self.criterion = nn.KLDivLoss(size_average=None, reduce=None, reduction='sum')
+            self.lmbda = hparams.lmbda
+            # ! add adv flag here to read in the attention data for future using
+            self.attn_tr = load_pickle(os.path.join(hparams.attn_path, 'tr_attn_best'))
+            self.attn_te = load_pickle(os.path.join(hparams.attn_path, 'te_attn_best'))
+            self.pr_tr = load_pickle(os.path.join(hparams.attn_path, 'tr_pr_best'))
+            self.pr_te = load_pickle(os.path.join(hparams.attn_path, 'te_pr_best'))
+
+            
 
     def compute(self, inputs_word_emb, inputs_char_emb):
 
@@ -81,3 +97,5 @@ class TransformerTagger(Tagger):
         # import ipdb; ipdb.set_trace()
         return enc_out
 
+    def batch_tvd(self, predictions, targets): #accepts two Torch tensors... " "
+        return (0.5 * torch.abs(predictions - targets)).sum()

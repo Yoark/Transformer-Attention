@@ -10,6 +10,10 @@ from torchtext.vocab import Vectors, GloVe, CharNGram
 import numpy as np
 import random
 import logging
+import os
+import pickle
+from .lots import AttnField, PredField
+
 logger = logging.getLogger(__name__)
 
 
@@ -97,7 +101,7 @@ def conll2000_dataset(batch_size, use_local=False, root='.data/conll2000',
                             train_file='train.txt',
                             test_file='test.txt',
                             validation_frac=0.1,
-                            convert_digits=True):
+                            convert_digits=True, adv=False, attn_path=None):
     """
     conll2000: Conll 2000 (Chunking)
     Extract Conll2000 Chunking dataset using torchtext. By default will fetch
@@ -138,7 +142,11 @@ def conll2000_dataset(batch_size, use_local=False, root='.data/conll2000',
 
     fields = [(('inputs_word', 'inputs_char'), (inputs_word, inputs_char)),
                 (None, None), ('labels', labels)]
+    # if adv:
+    #     attn = AttnField()
+    #     pred = PredField()
 
+    #     fields = fields.extend([('attn', attn), ('pred', pred)])
     if use_local:
         # Load the data
         train, test = SequenceTaggingDataset.splits(
@@ -161,7 +169,10 @@ def conll2000_dataset(batch_size, use_local=False, root='.data/conll2000',
     else:
         train, val, test = CoNLL2000Chunking.splits(fields=tuple(fields), 
                                                     validation_frac=validation_frac)
-    # import ipdb; ipdb.set_trace()
+    # train_sort_key = train.sort_key
+    # #val_sort_key = val.sort_key
+    # test_sort_key = test.sort_key
+    # # import ipdb; ipdb.set_trace()
     logger.info('---------- CONLL 2000 Chunking ---------')
     logger.info('Train size: %d'%(len(train)))
     logger.info('Validation size: %d'%(len(val)))
@@ -175,7 +186,24 @@ def conll2000_dataset(batch_size, use_local=False, root='.data/conll2000',
     labels.build_vocab(train.labels)
     logger.info('Input vocab size:%d'%(len(inputs_word.vocab)))
     logger.info('Tagset size: %d'%(len(labels.vocab)))
-
+    
+    # import ipdb; ipdb.set_trace()
+    # if adv:
+    #     logger.info('attach attns to datasets')
+    #     attn_tr = load_pickle(os.path.join(attn_path, 'tr_attn_best'))
+    #     attn_te = load_pickle(os.path.join(attn_path, 'te_attn_best'))
+    #     tr_pr = load_pickle(os.path.join(attn_path, 'tr_pr_best'))
+    #     te_pr = load_pickle(os.path.join(attn_path, 'te_pr_best'))
+        
+    #     # train = [(train_example, attn, pr) for train_example, attn, pr in zip(train, attn_tr, tr_pr)]
+    #     train = bind_data(train, attn_tr, tr_pr)
+    #     test = bind_data(test, attn_te, te_pr)
+    #     train = data.Dataset(examples=train, fields=tuple(fields))
+    #     test = data.Dataset(examples=test, fields=tuple(fields))
+    #     train.sort_key = train_sort_key
+    #     test.sort_key = test_sort_key
+        #! trun list of example back to Dataset.
+        # test = [(test_example, attn, pr) for test_example, attn, pr in zip(test, attn_te, te_pr)]
     # Get iterators
     train_iter, val_iter, test_iter = data.BucketIterator.splits(
                             (train, val, test), batch_size=batch_size, 
@@ -189,3 +217,18 @@ def conll2000_dataset(batch_size, use_local=False, root='.data/conll2000',
         'iters': (train_iter, val_iter, test_iter), 
         'vocabs': (inputs_word.vocab, inputs_char.vocab, labels.vocab) 
         }
+
+
+def load_pickle(path):
+    with open(path, 'rb') as f:
+        data = pickle.load(f)
+    return data
+
+def bind_data(data, attns, prs):
+    """set attn, pr as attributes of data example"""
+    new_data_egs = []
+    for example, attn, pr in zip(data, attns, prs):
+        example.attn = attn
+        example.pred = pr
+        new_data_egs.append(example)
+    return new_data_egs

@@ -31,7 +31,9 @@ PREFS.defaults(
     data_root='./.data/conll2000',
     data_train='train.txt',
     data_test='test.txt',
-    early_stopping='highest_5_F1'
+    early_stopping='highest_5_F1',
+    attn_root='./saved',
+    use_local=False
 )
 
 
@@ -39,7 +41,9 @@ PREFS.defaults(
 conll2000 = partial(conll2000_dataset, 
                                     root=PREFS.data_root,
                                     train_file=PREFS.data_train,
-                                    test_file=PREFS.data_test)
+                                    test_file=PREFS.data_test,
+                                    attn_path=PREFS.attn_root,
+                                    use_local=PREFS.use_local)
 
 # Hyperparameter configuration for Chunking tasks
 
@@ -59,7 +63,10 @@ def hparams_transformer_chunk():
         relu_dropout=0.2,
         learning_rate_decay='noam_step',
         learning_rate_warmup_steps=500,
-        use_crf=True
+        use_crf=True,
+        attn_path=PREFS.attn_root,
+        adversarial=False,
+        lmbda=2e-4
     )
 
 def hparams_lstm_chunk():

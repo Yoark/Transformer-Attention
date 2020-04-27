@@ -17,10 +17,18 @@ import pickle
 import shutil
 import json, codecs
 import logging
+import random
+
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
 logger = logging.getLogger(__name__)
 
 OPTIMIZER_FILE = "optimizer.pt"
 
+def load_pickle(path):
+    with open(path, 'rb') as f:
+        data = pickle.load(f)
+    return data
 # Decay functions to be used with lr_scheduler
 def lr_decay_noam(hparams):
     return lambda t: (
@@ -123,6 +131,18 @@ class Trainer(object):
             else:
                 raise ValueError("Unknown lr decay range {}".format(lrd_range))
 
+        # # ! add adv flag here to read in the attention data for future using
+        # if self.model.adversarial:
+        #     self.attn_tr = load_pickle(os.path.join(hparams.attn_path, 'tr_attn_best'))
+        #     self.attn_te = load_pickle(os.path.join(hparams.attn_path, 'te_attn_best'))
+        #     self.pr_tr = load_pickle(os.path.join(hparams.attn_path, 'tr_pr_best'))
+        #     self.pr_te = load_pickle(os.path.join(hparams.attn_path, 'te_pr_best'))
+
+        #     self.attn_tr = torch.from_numpy(self.attn_tr)
+        #     self.attn_te = torch.from_numpy(self.attn_te)
+        #     self.pr_tr = torch.from_numpy(self.pr_tr, dtype=torch.int64)
+        #     self.pr_te = torch.from_numpy(self.pr_te, dtype=torch.int64)
+            
         # Display number of parameters
         logger.info('Parameters: {}(trainable), {}(non-trainable)'.format(*compute_num_params(self.model)))
     
@@ -172,41 +192,66 @@ class Trainer(object):
             best_fn, best_window, best_metric_name = self._get_early_stopping_criteria(early_stopping)
             tracking = deque([], best_window + 1)
 
+        # ! add adv flag here, so, if adv: pack data batch and attn batch and prediction batch together
+
+        train_data = list(self.train_iter)
+        test_data = list(self.test_iter) 
+        if self.model.adversarial:
+            # import ipdb; ipdb.set_trace()
+            train_pack = [(tr, attn, pr) for tr, attn, pr in zip(train_data, self.model.attn_tr, self.model.pr_tr)]
+            test_pack = [(te, attn, pr) for te, attn, pr in zip(test_data, self.model.attn_te, self.model.pr_te)]
 
         for epoch in range(num_epochs):
             # * Allow the training to have shuffling.
             # add advsarial flag here
-            #! if self.adversarial:
-            #     self.train_iter.shuffle = False
-            #     # json load attns
-            #     self.train_iter.init_epoch()
-            #     train_batchs = list(self.train_iter)
-            #     tr_batch = [(train_batch, attn_batch) for train_batch, attn_batch in zip(train_batchs, attn_batchs)]
-            #     prog_iter = tr_batch
+            # self.train_iter.shuffle = True 
+            # self.train_iter.init_epoch()
+            # prog_iter = tqdm(self.train_iter, leave=False)
+            if self.model.adversarial:
+                random.shuffle(train_pack)
+                prog_iter = train_pack
+            else:
+                # import ipdb; ipdb.set_trace()
+                random.shuffle(train_data)
+                prog_iter = train_data
+            prog_iter = tqdm(prog_iter, leave=False)
 
-            self.train_iter.shuffle = False 
-            self.train_iter.init_epoch()
             epoch_loss = 0
             count = 0
-
+            # train_batchs = list(self.train_iter)
             logger.info('Epoch %d (%d)'%(epoch + 1, int(self.model.iterations)))
 
-            prog_iter = tqdm(self.train_iter, leave=False)
-
-            #! if self.adversarial:
-            #     self.train_iter.shuffle = False
-            #     # json load attns
-            #     self.train_iter.init_epoch()
-            #     train_batchs = list(self.train_iter)
-            #     tr_batch = [(train_batch, attn_batch) for train_batch, attn_batch in zip(train_batchs, attn_batchs)]
-            #     prog_iter = tr_batch
-
-            self.model.train()
+            # self.model.train()
             for batch in prog_iter:
                 # Train mode
-                # self.model.train()
+                self.model.train()
                     # import ipdb; ipdb.set_trace()
-                if not self.adversarial:
+                if  self.model.adversarial:
+                    # pr here is the target predictions
+                    data, attn, pr = batch
+
+                    attn = torch.from_numpy(attn).to(device)
+                    pr = torch.from_numpy(pr).to(device)
+                    
+                    cat_attns = []
+                    self.optimizer.zero_grad()
+                    pr_loss, _ = self.model.loss(data, pr)
+                    # log the attentions here...
+
+                    # import ipdb; ipdb.set_trace()
+                    # kl_loss = self.model.criterion(attn.log(), )
+                    pr_loss.backward()
+                    self.optimizer.step()
+                    if self.lr_scheduler_step:
+                        self.lr_scheduler_step.step()
+                    epoch_loss += pr_loss.item()
+                    count += 1
+                    self.model.iterations += 1
+                
+                    # Display loss
+                    prog_iter.set_description('Training')
+                    prog_iter.set_postfix(loss=(epoch_loss/count))
+                else:
                     self.optimizer.zero_grad()
                     # if self.adversarial
                     loss, _ = self.model.loss(batch)
@@ -219,17 +264,17 @@ class Trainer(object):
                     epoch_loss += loss.item()
                     count += 1
                     self.model.iterations += 1
-
+                
                     # Display loss
                     prog_iter.set_description('Training')
                     prog_iter.set_postfix(loss=(epoch_loss/count))
-                else:
-                    self.optimizer.zero_grad()
-                    # # add the other losses here
-                    loss, _ = self.model.loss(batch, batch_attn)
+                # else:
+                #     self.optimizer.zero_grad()
+                #     # # add the other losses here
+                #     loss, _ = self.model.loss(batch, batch_attn)
 
-                    loss = loss
-                    loss.backward()
+                #     loss = loss
+                #     loss.backward()
 
 
             ####
@@ -284,10 +329,10 @@ class Trainer(object):
                         train_at, train_pr = self.catch_attention(self.train_iter)
                         test_at, test_pr = self.catch_attention(self.test_iter)
                         # import ipdb; ipdb.set_trace()
-                        attentions_tr = [el.tolist() for el in train_at]
-                        attentions_te = [el.tolist() for el in test_at]
-                        prediction_tr = [el.tolist() for el in train_pr] 
-                        prediction_te = [el.tolist() for el in test_pr]
+                        # attentions_tr = [el.tolist() for el in train_at]
+                        # attentions_te = [el.tolist() for el in test_at]
+                        # prediction_tr = [el.tolist() for el in train_pr] 
+                        # prediction_te = [el.tolist() for el in test_pr]
                         print("SAVING PREDICTIONS AND ATTENTIONS")
                         dirname = os.path.join(self.file_path, 'saved')
 
@@ -302,10 +347,10 @@ class Trainer(object):
                         # json.dump(prediction_te, open(os.path.join(dirname, '/test_predictions_best_epoch.json'), 'w'))
                         # json.dump(attentions_tr, open(os.path.join(dirname, '/train_attentions_best_epoch.json'), 'w'))
                         # json.dump(attentions_te, open(os.path.join(dirname, '/test_attentions_best_epoch.json'), 'w'))
-                        save_data(prediction_tr, dirname+'/tr_pr_best')
-                        save_data(prediction_te, dirname+'/te_pr_best')
-                        save_data(attentions_tr, dirname+'/tr_attn_best')
-                        save_data(attentions_te, dirname+'/te_attn_best')
+                        save_data(train_pr, dirname+'/tr_pr_best')
+                        save_data(test_pr, dirname+'/te_pr_best')
+                        save_data(train_at, dirname+'/tr_attn_best')
+                        save_data(test_at, dirname+'/te_attn_best')
                         break
                 
             if save:
@@ -345,8 +390,8 @@ class Trainer(object):
                 predictions = self.model(batch)
                 outputs.append(predictions.cpu().data.numpy())
 
-        attns = [x for y in attns for x in y]
-        outputs = [x for y in outputs for x in y]
+        # attns = [x for y in attns for x in y]
+        # outputs = [x for y in outputs for x in y]
         # remove hook
         for hk in hooks:
             hk.remove()
@@ -354,6 +399,7 @@ class Trainer(object):
         logger.info("prediction, and attns for best epoch obtained, release hook")
         #! save it somewhere:
         # try pickle first
+        import ipdb; ipdb.set_trace()
         return attns, outputs
     # def get_attentions(self, md, inp, out):
     #     self.attentions.append(out.cpu().data.numpy())

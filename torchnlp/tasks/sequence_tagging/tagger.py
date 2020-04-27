@@ -38,10 +38,7 @@ class Tagger(Model):
         super(Tagger, self).__init__(hparams)
 
         # ! put adversarial sign here
-        self.adversarial = False
-
-        if hparams.adversarial:
-            self.adversarial = True
+        
 
         if vocabs is None or not isinstance(vocabs, tuple) or len(vocabs) != 3:
             raise ValueError('Must provide vocabs 3-tuple')
@@ -97,7 +94,7 @@ class Tagger(Model):
         # TODO: Add beam search somewhere :)
         
 
-    def loss(self, batch, compute_predictions=False):
+    def loss(self, batch, target_pr=None, compute_predictions=False):
         """
         NOTE: batch must have the following attributes:
             inputs_word, inputs_char, labels
@@ -106,11 +103,15 @@ class Tagger(Model):
         predictions = None
         if compute_predictions:
             predictions = self.output_layer(hidden)
-        if self.adversarial:
-            pass
+
+        if self.adversarial and self.training:
+            # batch is (batch, attn_batch, prediction_batch)
+            # import ipdb; ipdb.set_trace()
+            loss_val = self.output_layer.loss(hidden, target_pr) 
             #load predictions, do loss
-            # load attns maybe outsidek
-        loss_val = self.output_layer.loss(hidden, batch.labels)
+            # load attns maybe outside
+        else:
+            loss_val = self.output_layer.loss(hidden, batch.labels)
 
         return loss_val, predictions
 
@@ -168,5 +169,4 @@ def hparams_tagging_base():
         optimizer_adam_beta1=0.9,
         optimizer_adam_beta2=0.98,
         use_crf=False,
-        adversarial=False
     )
