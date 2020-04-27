@@ -33,7 +33,8 @@ PREFS.defaults(
     data_test='test.txt',
     early_stopping='highest_5_F1',
     attn_root='./saved',
-    use_local=False
+    use_local=False,
+    froze_path='./froze'
 )
 
 
@@ -67,9 +68,12 @@ def hparams_transformer_chunk():
         use_crf=False,
         attn_path=PREFS.attn_root,
         adversarial=False,
-        lmbda=2e-4
-    )
+        lmbda=2e-4,
+        froze=False,
+        froze_path=PREFS.froze_path
 
+    )
+# to use probing classifier, set adversarial to False, and froze to True
 def hparams_lstm_chunk():
     hparams = hparams_tagging_base()
 

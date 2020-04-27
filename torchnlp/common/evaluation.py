@@ -21,7 +21,7 @@ class Evaluator(object):
         self.data_iter = data_iter
         self.metrics = metrics or []
 
-    def evaluate(self, model):
+    def evaluate(self, model, froze_attn=None):
         """
         Evaluates the model on the given metrics for a dataset.
         Returns: A dict containing all the metrics
@@ -36,7 +36,7 @@ class Evaluator(object):
         prog_iter = tqdm(self.data_iter, leave=False)
         with torch.no_grad():
             for batch in prog_iter:
-                loss, predictions, _ = model.loss(batch, compute_predictions=True)
+                loss, predictions, _ = model.loss(batch, compute_predictions=True, froze_attn=froze_attn)
                 for m in self.metrics:
                     m.evaluate(batch, loss, predictions)
                 total_loss += float(loss)

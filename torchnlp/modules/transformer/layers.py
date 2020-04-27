@@ -18,7 +18,7 @@ class EncoderLayer(nn.Module):
     NOTE: The layer normalization step has been moved to the input as per latest version of T2T
     """
     def __init__(self, hidden_size, total_key_depth, total_value_depth, filter_size, num_heads,
-                 bias_mask=None, layer_dropout=0.0, attention_dropout=0.0, relu_dropout=0.0):
+                 bias_mask=None, layer_dropout=0.0, attention_dropout=0.0, relu_dropout=0.0, froze=False):
         """
         Parameters:
             hidden_size: Hidden size
@@ -36,7 +36,7 @@ class EncoderLayer(nn.Module):
         super(EncoderLayer, self).__init__()
         
         self.multi_head_attention = MultiHeadAttention(hidden_size, total_key_depth, total_value_depth, 
-                                                       hidden_size, num_heads, bias_mask, attention_dropout)
+                                                       hidden_size, num_heads, bias_mask, attention_dropout, froze=froze)
         # ! Here I want to have linear + relu + linear 
         self.positionwise_feed_forward = PositionwiseFeedForward(hidden_size, filter_size, hidden_size,
                                                                  layer_config='ll', padding = 'both', 
@@ -45,7 +45,7 @@ class EncoderLayer(nn.Module):
         self.layer_norm_mha = LayerNorm(hidden_size)
         self.layer_norm_ffn = LayerNorm(hidden_size)
         
-    def forward(self, inputs):
+    def forward(self, inputs, froze_attn=None):
         x = inputs
         # import ipdb; ipdb.set_trace() 
         # Layer Normalization
@@ -53,8 +53,7 @@ class EncoderLayer(nn.Module):
         
         # Multi-head attention
         # y, attn, bias_mask = self.multi_head_attention(x_norm, x_norm, x_norm)
-        
-        y, attn, bias_mask = self.multi_head_attention(x_norm, x_norm, x_norm)
+        y, attn, bias_mask = self.multi_head_attention(x_norm, x_norm, x_norm, froze_attn)
         # import ipdb; ipdb.set_trace()
         # Dropout and residual
         x = self.dropout(x + y)

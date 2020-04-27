@@ -55,7 +55,7 @@ class Encoder(nn.Module):
     """
     def __init__(self, embedding_size, hidden_size, num_layers, num_heads, total_key_depth, total_value_depth,
                  filter_size, max_length=100, input_dropout=0.0, layer_dropout=0.0, 
-                 attention_dropout=0.0, relu_dropout=0.0, use_mask=False, adv=False):
+                 attention_dropout=0.0, relu_dropout=0.0, use_mask=False, adv=False, froze=False):
         """
         Parameters:
             embedding_size: Size of embeddings
@@ -90,13 +90,13 @@ class Encoder(nn.Module):
         
         self.embedding_proj = nn.Linear(embedding_size, hidden_size, bias=False)
         self.adversarial = adv
-
+        self.froze = froze
 # if not self.adversarial:
 #     self.enc = nn.Sequential(*[EncoderLayer(*params) for l in range(num_layers)])
     # else:
         self.encoders = nn.ModuleList()
         for l in range(num_layers):
-            self.encoders.append(EncoderLayer(*params))
+            self.encoders.append(EncoderLayer(*params, froze=froze))
 
         self.layer_norm = LayerNorm(hidden_size)
         self.input_dropout = nn.Dropout(input_dropout)
@@ -106,7 +106,7 @@ class Encoder(nn.Module):
         #         inst.register_forward_hook(hook=hook)
         
     
-    def forward(self, inputs):
+    def forward(self, inputs, froze_attn=None):
         #Add input dropout
         x = self.input_dropout(inputs)
         # import ipdb; ipdb.set_trace() 
@@ -119,12 +119,16 @@ class Encoder(nn.Module):
         # y = self.enc(x)
         attns = []
         # if self.adversarial:
-        for i in range(len(self.encoders)):
-            # import ipdb; ipdb.set_trace()
-            x, attn = self.encoders[i](x)
-            attns.append(attn)
-        y = x
-        # else:
+        if not self.froze:
+            for i in range(len(self.encoders)):
+                x, attn = self.encoders[i](x)
+                attns.append(attn)
+            y = x
+        else:
+            for i in range(len(self.encoders)):
+                x, attn = self.encoders[i](x, froze_attn)
+                # attns.append(attn)
+            y = x
             # y = self.enc(x)
         
         y = self.layer_norm(y)

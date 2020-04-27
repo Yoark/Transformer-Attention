@@ -71,22 +71,22 @@ class Tagger(Model):
         else:
             self.output_layer = outputs.SoftmaxOutputLayer(hparams.hidden_size, len(vocab_tags))
 
-    def _embed_compute(self, batch):
+    def _embed_compute(self, batch, froze_attn=None):
         inputs_word_emb = self.embedding_word(batch.inputs_word)
         inputs_char_emb = None
         if self.embedding_char is not None:
             inputs_char_emb = self.embedding_char(batch.inputs_char.view(-1, 
                                                   batch.inputs_char.shape[-1]))
         # import ipdb; ipdb.set_trace()
-        return self.compute(inputs_word_emb, inputs_char_emb)
+        return self.compute(inputs_word_emb, inputs_char_emb, froze_attn)
 
-    def forward(self, batch):
+    def forward(self, batch, froze_attn=None):
         """
         NOTE: batch must have the following attributes:
             inputs_word, inputs_char, labels
         """
         with torch.no_grad():
-            hidden, _ = self._embed_compute(batch)
+            hidden, _ = self._embed_compute(batch, froze_attn)
             output = self.output_layer(hidden)
 
         return output
@@ -94,12 +94,13 @@ class Tagger(Model):
         # TODO: Add beam search somewhere :)
         
 
-    def loss(self, batch, target_pr=None, compute_predictions=False):
+    def loss(self, batch, froze_attn=None, target_pr=None, compute_predictions=False):
         """
         NOTE: batch must have the following attributes:
             inputs_word, inputs_char, labels
         """
-        hidden, attns = self._embed_compute(batch)
+        hidden, attns = self._embed_compute(batch, froze_attn)
+
         predictions = None
         if compute_predictions:
             predictions = self.output_layer(hidden)

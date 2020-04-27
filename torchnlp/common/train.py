@@ -132,16 +132,6 @@ class Trainer(object):
                 raise ValueError("Unknown lr decay range {}".format(lrd_range))
 
         # # ! add adv flag here to read in the attention data for future using
-        # if self.model.adversarial:
-        #     self.attn_tr = load_pickle(os.path.join(hparams.attn_path, 'tr_attn_best'))
-        #     self.attn_te = load_pickle(os.path.join(hparams.attn_path, 'te_attn_best'))
-        #     self.pr_tr = load_pickle(os.path.join(hparams.attn_path, 'tr_pr_best'))
-        #     self.pr_te = load_pickle(os.path.join(hparams.attn_path, 'te_pr_best'))
-
-        #     self.attn_tr = torch.from_numpy(self.attn_tr)
-        #     self.attn_te = torch.from_numpy(self.attn_te)
-        #     self.pr_tr = torch.from_numpy(self.pr_tr, dtype=torch.int64)
-        #     self.pr_te = torch.from_numpy(self.pr_te, dtype=torch.int64)
             
         # Display number of parameters
         logger.info('Parameters: {}(trainable), {}(non-trainable)'.format(*compute_num_params(self.model)))
@@ -200,18 +190,23 @@ class Trainer(object):
             train_pack = [(tr, attn, pr) for tr, attn, pr in zip(train_data, self.model.attn_tr, self.model.pr_tr)]
             test_pack = [(te, attn, pr) for te, attn, pr in zip(test_data, self.model.attn_te, self.model.pr_te)]
 
+        if self.model.froze:
+            train_pack = [(tr, attn) for tr, attn in zip(train_data, self.model.attn_tr)]
+            test_pack = [(te, attn) for te, attn in zip(test_data, self.model.attn_te)]
+
+
         for epoch in range(num_epochs):
             # * Allow the training to have shuffling.
             # add advsarial flag here
             # self.train_iter.shuffle = True 
             # self.train_iter.init_epoch()
             # prog_iter = tqdm(self.train_iter, leave=False)
-            if self.model.adversarial:
-                random.shuffle(train_pack)
-                prog_iter = train_pack
-            else:
-                random.shuffle(train_data)
-                prog_iter = train_data
+            # if self.model.adversarial:
+            random.shuffle(train_pack)
+            prog_iter = train_pack
+            # else:
+            #     random.shuffle(train_data)
+            #     prog_iter = train_data
             prog_iter = tqdm(prog_iter, leave=False)
 
             epoch_loss = 0
@@ -220,9 +215,12 @@ class Trainer(object):
             count = 0
             # train_batchs = list(self.train_iter)
             logger.info('Epoch %d (%d)'%(epoch + 1, int(self.model.iterations)))
-
+            froze_attn = None
             # self.model.train()
             for batch in prog_iter:
+                # ! just give it something
+                # ! just give it something
+                # ! just give it something
                 # Train mode
                 self.model.train()
                 if  self.model.adversarial:
@@ -234,7 +232,7 @@ class Trainer(object):
                     
                     self.optimizer.zero_grad()
 
-                    pr_loss, _, attns_cur = self.model.loss(data, pr)
+                    pr_loss, _, attns_cur = self.model.loss(data, target_pr=pr)
 
                     # log the attentions here...
 
@@ -261,10 +259,11 @@ class Trainer(object):
                     # for hk in hooks:
                     #     hk.remove()
 
-                else:
+                elif not self.model.adversarial and not self.model.froze:
                     self.optimizer.zero_grad()
                     # if self.adversarial
-                    loss, _, _ = self.model.loss(batch)
+                    data, _, _ = batch
+                    loss, _, _ = self.model.loss(data)
                     loss.backward()
                     self.optimizer.step()
 
@@ -278,6 +277,37 @@ class Trainer(object):
                     # Display loss
                     prog_iter.set_description('Training')
                     prog_iter.set_postfix(loss=(epoch_loss/count))
+
+                elif self.model.froze:
+                    data, attn = batch
+
+                    froze_attn = torch.from_numpy(attn).to(device)
+                    # pr = torch.from_numpy(pr).to(device)
+                    # ! look here
+                    # froze_attn.requires_grad = False
+                    self.optimizer.zero_grad()
+
+                    loss, _,_  = self.model.loss(data, froze_attn=froze_attn)
+
+                    # log the attentions here...
+
+                    # logger.info(f'total_loss: {total_loss}, kl_loss: {kl_loss}, nll_loss: {pr_loss}')
+                    loss.backward()
+                    self.optimizer.step()
+
+                    if self.lr_scheduler_step:
+                        self.lr_scheduler_step.step()
+
+                    epoch_loss += loss.item()
+
+                    count += 1
+                    self.model.iterations += 1
+                
+                    # Display loss
+                    prog_iter.set_description('Training')
+                    prog_iter.set_postfix(loss=(epoch_loss/count))
+
+
                 # else:
                 #     self.optimizer.zero_grad()
                 #     # # add the other losses here
@@ -296,8 +326,8 @@ class Trainer(object):
             # ####
             if self.lr_scheduler_epoch:
                 self.lr_scheduler_epoch.step()
-
-            logger.info(f'total_loss: {epoch_loss/count}, kl_loss: {kld_loss/count}, nll_loss: {tvd_loss/count}')
+            if self.model.adversarial:
+                logger.info(f'total_loss: {epoch_loss/count}, kl_loss: {kld_loss/count}, nll_loss: {tvd_loss/count}')
             train_loss = epoch_loss/count
             all_metrics['train_loss'].append(train_loss)
             logger.info('Train Loss: {:3.5f}'.format(train_loss))
@@ -305,7 +335,7 @@ class Trainer(object):
             best_iteration = int(self.model.iterations)
             # Run evaluation
             if self.evaluator:
-                eval_metrics = self.evaluator.evaluate(self.model)
+                eval_metrics = self.evaluator.evaluate(self.model, froze_attn=froze_attn)
                 if not isinstance(eval_metrics, dict):
                     raise ValueError('eval_fn should return a dict of metrics')
 
@@ -335,32 +365,33 @@ class Trainer(object):
                         self.model.set_latest(self.task_name, best_iteration)
                         # ! save the attention for the best model, which make sense
                           
-                        train_at, train_pr = self.catch_attention(self.train_iter)
-                        test_at, test_pr = self.catch_attention(self.test_iter)
                         # attentions_tr = [el.tolist() for el in train_at]
                         # attentions_te = [el.tolist() for el in test_at]
                         # prediction_tr = [el.tolist() for el in train_pr] 
                         # prediction_te = [el.tolist() for el in test_pr]
-                        print("SAVING PREDICTIONS AND ATTENTIONS")
-                        import datetime
-                        time = str(datetime.datetime.now().time())
-                        
-                        dirname = os.path.join('/home/zijiao/research/atal/saved_'+str(self.model.adversarial)+'_', time)
+                        if not self.model.froze:
+                            train_at, train_pr = self.catch_attention(self.train_iter)
+                            test_at, test_pr = self.catch_attention(self.test_iter)
+                            print("SAVING PREDICTIONS AND ATTENTIONS")
+                            import datetime
+                            time = str(datetime.datetime.now().time())
+                            
+                            dirname = os.path.join('/home/zijiao/research/atal/saved_'+str(self.model.adversarial)+'_', time)
 
-                        if not os.path.exists(dirname):
-                            os.makedirs(dirname, mode=0o777)
-                        else:
-                            shutil.rmtree(dirname)
-                            os.makedirs(dirname, mode=0o777)
+                            if not os.path.exists(dirname):
+                                os.makedirs(dirname, mode=0o777)
+                            else:
+                                shutil.rmtree(dirname)
+                                os.makedirs(dirname, mode=0o777)
 
-                        # json.dump(prediction_tr, open(os.path.join(dirname, '/train_predictions_best_epoch.json'), 'w'))
-                        # json.dump(prediction_te, open(os.path.join(dirname, '/test_predictions_best_epoch.json'), 'w'))
-                        # json.dump(attentions_tr, open(os.path.join(dirname, '/train_attentions_best_epoch.json'), 'w'))
-                        # json.dump(attentions_te, open(os.path.join(dirname, '/test_attentions_best_epoch.json'), 'w'))
-                        save_data(train_pr, dirname+'/tr_pr_best')
-                        save_data(test_pr, dirname+'/te_pr_best')
-                        save_data(train_at, dirname+'/tr_attn_best')
-                        save_data(test_at, dirname+'/te_attn_best')
+                            # json.dump(prediction_tr, open(os.path.join(dirname, '/train_predictions_best_epoch.json'), 'w'))
+                            # json.dump(prediction_te, open(os.path.join(dirname, '/test_predictions_best_epoch.json'), 'w'))
+                            # json.dump(attentions_tr, open(os.path.join(dirname, '/train_attentions_best_epoch.json'), 'w'))
+                            # json.dump(attentions_te, open(os.path.join(dirname, '/test_attentions_best_epoch.json'), 'w'))
+                            save_data(train_pr, dirname+'/tr_pr_best')
+                            save_data(test_pr, dirname+'/te_pr_best')
+                            save_data(train_at, dirname+'/tr_attn_best')
+                            save_data(test_at, dirname+'/te_attn_best')
                         break
                 
             if save:

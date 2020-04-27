@@ -14,7 +14,7 @@ class MultiHeadAttention(nn.Module):
     Refer Figure 2
     """
     def __init__(self, input_depth, total_key_depth, total_value_depth, output_depth, 
-                 num_heads, bias_mask=None, dropout=0.0):
+                 num_heads, bias_mask=None, dropout=0.0, froze=False):
         """
         Parameters:
             input_depth: Size of last dimension of input
@@ -44,7 +44,7 @@ class MultiHeadAttention(nn.Module):
         self.key_linear = nn.Linear(input_depth, total_key_depth, bias=False)
         self.value_linear = nn.Linear(input_depth, total_value_depth, bias=False)
         self.output_linear = nn.Linear(total_value_depth, output_depth, bias=False)
-        
+        self.froze = froze 
         self.dropout = nn.Dropout(dropout)
     
     def _split_heads(self, x):
@@ -73,7 +73,7 @@ class MultiHeadAttention(nn.Module):
         shape = x.shape
         return x.permute(0, 2, 1, 3).contiguous().view(shape[0], shape[2], shape[3]*self.num_heads)
         
-    def forward(self, queries, keys, values):
+    def forward(self, queries, keys, values, froze_attn=None):
         
         # Do a linear for each component
         queries = self.query_linear(queries)
@@ -89,20 +89,23 @@ class MultiHeadAttention(nn.Module):
         
         # Scale queries
         queries *= self.query_scale
-        
+        # freeze multihead attention
+        if not self.froze:
         # Combine queries and keys
-        logits = torch.matmul(queries, keys.permute(0, 1, 3, 2))
-        #! This supposed to be the attention of multihead attention, haha
-        #!  save it here, pass it out
-        # Add bias to mask future values
-        if self.bias_mask is not None:
-            logits += self.bias_mask[:, :, :logits.shape[-2], :logits.shape[-1]].type_as(logits.data)
-        
-        # Convert to probabilites
-        weights = nn.functional.softmax(logits, dim=-1)
-        
-        # Dropout
-        weights = self.dropout(weights)
+            logits = torch.matmul(queries, keys.permute(0, 1, 3, 2))
+            #! This supposed to be the attention of multihead attention, haha
+            #!  save it here, pass it out
+            # Add bias to mask future values
+            if self.bias_mask is not None:
+                logits += self.bias_mask[:, :, :logits.shape[-2], :logits.shape[-1]].type_as(logits.data)
+            
+            # Convert to probabilites
+            weights = nn.functional.softmax(logits, dim=-1)
+            
+            # Dropout
+            weights = self.dropout(weights)
+        else:
+            weights = froze_attn
         # import ipdb; ipdb.set_trace() 
         # Combine with values to get context
         contexts = torch.matmul(weights, values)

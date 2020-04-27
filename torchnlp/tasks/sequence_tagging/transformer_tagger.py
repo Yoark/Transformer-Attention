@@ -63,6 +63,11 @@ class TransformerTagger(Tagger):
                                 )
         # ! Look
         self.adversarial = False
+        self.froze = False
+        if hparams.froze:
+            self.attn_tr = load_pickle(os.path.join(hparams.froze_path, 'tr_attn_best'))
+            self.attn_te = load_pickle(os.path.join(hparams.froze_path, 'te_attn_best'))
+            self.froze = True
 
         if hparams.adversarial:
             self.adversarial = True
@@ -76,7 +81,7 @@ class TransformerTagger(Tagger):
 
             
 
-    def compute(self, inputs_word_emb, inputs_char_emb):
+    def compute(self, inputs_word_emb, inputs_char_emb, froze_attn=None):
 
         if inputs_char_emb is not None:
             seq_len = inputs_word_emb.shape[1]
@@ -94,7 +99,8 @@ class TransformerTagger(Tagger):
             inputs_word_emb = torch.cat([inputs_word_emb, inputs_emb_char], -1)
 
         # Apply Transformer Encoder
-        enc_out, attns = self.transformer_enc(inputs_word_emb)
+        enc_out, attns = self.transformer_enc(inputs_word_emb, froze_attn=froze_attn)
+
         # import ipdb; ipdb.set_trace()
         return enc_out, attns
 
