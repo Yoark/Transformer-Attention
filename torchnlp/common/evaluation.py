@@ -5,14 +5,19 @@ from __future__ import print_function
 import torch
 from functools import reduce
 from tqdm import tqdm
+from torchnlp.common.train import load_pickle
+import pickle
+import os
+import torch
 
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 class Evaluator(object):
     """
     A class to evaluate a dataset on multiple
     metrics. Uses generator tricks to pass batch predictions
     to all the metric functions without recomputing
     """
-    def __init__(self, data_iter, *metrics):
+    def __init__(self, data_iter, *metrics, adv=False, hparams=None):
         """
         Parameters:
             data_iter: Dataset iterator derived from torchtext.data.Iterator
@@ -20,6 +25,9 @@ class Evaluator(object):
         """
         self.data_iter = data_iter
         self.metrics = metrics or []
+        if adv:
+            self.adv = True
+            self.attn_te = load_pickle(os.path.join(hparams.attn_path, 'te_attn_best'))
 
     def evaluate(self, model, froze_attn=None):
         """
@@ -28,29 +36,38 @@ class Evaluator(object):
         """
         self.data_iter.init_epoch()
         model.eval()
+
+        data_pack = [(batch, attn) for batch, attn in zip(list(self.data_iter), self.attn_te)]
+        prog_iter = data_pack
         for m in self.metrics:
             m.reset()
 
         total_loss = 0
+        kl_loss_total = 0
 
-        prog_iter = tqdm(self.data_iter, leave=False)
+        prog_iter = tqdm(prog_iter, leave=False)
         with torch.no_grad():
             for batch in prog_iter:
-                loss, predictions, _ = model.loss(batch, compute_predictions=True, froze_attn=froze_attn)
+                data, attn_target_te = batch
+                attn_target_te = torch.from_numpy(attn_target_te).to(device)
+                loss, predictions, attn = model.loss(data, compute_predictions=True, froze_attn=froze_attn)
+                kl_loss = model.criterion(attn_target_te.log(), attn[0])
                 for m in self.metrics:
-                    m.evaluate(batch, loss, predictions)
+                    m.evaluate(data, loss, predictions)
                 total_loss += float(loss)
-                
+                kl_loss_total += float(kl_loss)                
                 prog_iter.set_description('Evaluating')
             
-            results = {'loss': total_loss/len(self.data_iter)}
+            results = {'loss': total_loss/len(prog_iter)}
+            print(f'kl_loss_final: {kl_loss_total/len(prog_iter)}, pre_loss : {total_loss/len(prog_iter)}')
             for m in self.metrics:
+
                 r = m.results(total_loss)
                 if not isinstance(r, dict):
                     raise ValueError('{}.results() should return a dict containing metrics'.format(m.__class__.__name__))
                 results.update(r)
 
-        return results
+        return results, total_loss/len(prog_iter), kl_loss_total/len(prog_iter)
 
 class Metrics(object):
     """

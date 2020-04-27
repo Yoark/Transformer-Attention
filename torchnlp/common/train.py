@@ -186,6 +186,8 @@ class Trainer(object):
 
         train_data = list(self.train_iter)
         test_data = list(self.test_iter) 
+        train_pack = train_data
+        test_pack = test_data
         if self.model.adversarial:
             train_pack = [(tr, attn, pr) for tr, attn, pr in zip(train_data, self.model.attn_tr, self.model.pr_tr)]
             test_pack = [(te, attn, pr) for te, attn, pr in zip(test_data, self.model.attn_te, self.model.pr_te)]
@@ -262,8 +264,8 @@ class Trainer(object):
                 elif not self.model.adversarial and not self.model.froze:
                     self.optimizer.zero_grad()
                     # if self.adversarial
-                    data, _, _ = batch
-                    loss, _, _ = self.model.loss(data)
+                    # data, _, _ = batch
+                    loss, _, _ = self.model.loss(batch)
                     loss.backward()
                     self.optimizer.step()
 
@@ -335,7 +337,7 @@ class Trainer(object):
             best_iteration = int(self.model.iterations)
             # Run evaluation
             if self.evaluator:
-                eval_metrics = self.evaluator.evaluate(self.model, froze_attn=froze_attn)
+                eval_metrics, pre_loss, div_loss = self.evaluator.evaluate(self.model, froze_attn=froze_attn)
                 if not isinstance(eval_metrics, dict):
                     raise ValueError('eval_fn should return a dict of metrics')
 
@@ -398,7 +400,7 @@ class Trainer(object):
                 self.model.save(self.task_name)
                 torch.save(self.optimizer.state_dict(), self.opt_path)
 
-        return best_iteration, all_metrics            
+        return best_iteration, all_metrics, pre_loss, div_loss            
 
             
     def catch_attention(self, it):

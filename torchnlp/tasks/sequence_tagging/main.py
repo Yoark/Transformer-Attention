@@ -58,7 +58,7 @@ def train(task_name, model_cls, dataset_fn, hparams=None, hparams_map=None,
             hparams = hparams_loaded
         dataset = dataset_fn(hparams.batch_size)
     
-    train_iter, validation_iter, _ = dataset['iters']
+    train_iter, validation_iter, test_iter = dataset['iters']
     _, _, tag_vocab = dataset['vocabs']
 
     metrics = [BasicMetrics(output_vocab=tag_vocab)]
@@ -66,15 +66,15 @@ def train(task_name, model_cls, dataset_fn, hparams=None, hparams_map=None,
         metrics += [IOBMetrics(tag_vocab=tag_vocab)]
 
     # Setup evaluator on the validation dataset
-    evaluator = Evaluator(validation_iter, *metrics)
+    # evaluator = Evaluator(validation_iter, *metrics, adv=hparams.adversarial)
+    evaluator = Evaluator(test_iter, *metrics, adv=hparams.adversarial, hparams=hparams)
 
     # Setup trainer
     trainer = Trainer(task_name, model, hparams, dataset['iters'], evaluator)
 
     # Start training
-    best_cp, _ = trainer.train(num_epochs, early_stopping=early_stopping)
-
-    return best_cp
+    best_cp, _, pre_loss, div_loss = trainer.train(num_epochs, early_stopping=early_stopping)
+    return best_cp, pre_loss, div_loss
 
 
 def evaluate(task_name, model_cls, dataset_fn, split, checkpoint=-1, use_iob_metrics=True):

@@ -106,6 +106,8 @@ class MultiHeadAttention(nn.Module):
             weights = self.dropout(weights)
         else:
             weights = froze_attn
+
+        import ipdb; ipdb.set_trace()
         # import ipdb; ipdb.set_trace() 
         # Combine with values to get context
         contexts = torch.matmul(weights, values)
