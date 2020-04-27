@@ -154,7 +154,6 @@ def conll2000_dataset(batch_size, use_local=False, root='.data/conll2000',
                                     train=train_file,
                                     test=test_file,
                                     fields=tuple(fields))
-        # import ipdb; ipdb.set_trace()
         # HACK: Saving the sort key function as the split() call removes it
         sort_key = train.sort_key
         # To make the split deterministic
@@ -172,7 +171,6 @@ def conll2000_dataset(batch_size, use_local=False, root='.data/conll2000',
     # train_sort_key = train.sort_key
     # #val_sort_key = val.sort_key
     # test_sort_key = test.sort_key
-    # # import ipdb; ipdb.set_trace()
     logger.info('---------- CONLL 2000 Chunking ---------')
     logger.info('Train size: %d'%(len(train)))
     logger.info('Validation size: %d'%(len(val)))
@@ -187,7 +185,6 @@ def conll2000_dataset(batch_size, use_local=False, root='.data/conll2000',
     logger.info('Input vocab size:%d'%(len(inputs_word.vocab)))
     logger.info('Tagset size: %d'%(len(labels.vocab)))
     
-    # import ipdb; ipdb.set_trace()
     # if adv:
     #     logger.info('attach attns to datasets')
     #     attn_tr = load_pickle(os.path.join(attn_path, 'tr_attn_best'))

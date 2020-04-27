@@ -60,10 +60,11 @@ def hparams_transformer_chunk():
         filter_size_char = 64,
         input_dropout=0.2,
         attention_dropout=0.2,
+
         relu_dropout=0.2,
         learning_rate_decay='noam_step',
         learning_rate_warmup_steps=500,
-        use_crf=True,
+        use_crf=False,
         attn_path=PREFS.attn_root,
         adversarial=False,
         lmbda=2e-4

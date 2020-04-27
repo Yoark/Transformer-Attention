@@ -68,7 +68,7 @@ class EncoderLayer(nn.Module):
         # Dropout and residual
         y = self.dropout(x + y)
         
-        return y
+        return y, attn
 
 class DecoderLayer(nn.Module):
     """

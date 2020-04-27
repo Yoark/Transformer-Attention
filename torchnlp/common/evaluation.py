@@ -36,7 +36,7 @@ class Evaluator(object):
         prog_iter = tqdm(self.data_iter, leave=False)
         with torch.no_grad():
             for batch in prog_iter:
-                loss, predictions = model.loss(batch, compute_predictions=True)
+                loss, predictions, _ = model.loss(batch, compute_predictions=True)
                 for m in self.metrics:
                     m.evaluate(batch, loss, predictions)
                 total_loss += float(loss)

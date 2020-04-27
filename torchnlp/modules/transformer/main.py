@@ -55,7 +55,7 @@ class Encoder(nn.Module):
     """
     def __init__(self, embedding_size, hidden_size, num_layers, num_heads, total_key_depth, total_value_depth,
                  filter_size, max_length=100, input_dropout=0.0, layer_dropout=0.0, 
-                 attention_dropout=0.0, relu_dropout=0.0, use_mask=False):
+                 attention_dropout=0.0, relu_dropout=0.0, use_mask=False, adv=False):
         """
         Parameters:
             embedding_size: Size of embeddings
@@ -89,8 +89,15 @@ class Encoder(nn.Module):
                  relu_dropout)
         
         self.embedding_proj = nn.Linear(embedding_size, hidden_size, bias=False)
-        self.enc = nn.Sequential(*[EncoderLayer(*params) for l in range(num_layers)])
-        
+        self.adversarial = adv
+
+# if not self.adversarial:
+#     self.enc = nn.Sequential(*[EncoderLayer(*params) for l in range(num_layers)])
+    # else:
+        self.encoders = nn.ModuleList()
+        for l in range(num_layers):
+            self.encoders.append(EncoderLayer(*params))
+
         self.layer_norm = LayerNorm(hidden_size)
         self.input_dropout = nn.Dropout(input_dropout)
         #! add hook here to store attn 
@@ -109,10 +116,19 @@ class Encoder(nn.Module):
         # Add timing signal
         x += self.timing_signal[:, :inputs.shape[1], :].type_as(inputs.data)
         # import ipdb; ipdb.set_trace()
-        y = self.enc(x)
+        # y = self.enc(x)
+        attns = []
+        # if self.adversarial:
+        for i in range(len(self.encoders)):
+            # import ipdb; ipdb.set_trace()
+            x, attn = self.encoders[i](x)
+            attns.append(attn)
+        y = x
+        # else:
+            # y = self.enc(x)
         
         y = self.layer_norm(y)
-        return y
+        return y, attns 
 
 class Decoder(nn.Module):
     """

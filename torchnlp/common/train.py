@@ -197,7 +197,6 @@ class Trainer(object):
         train_data = list(self.train_iter)
         test_data = list(self.test_iter) 
         if self.model.adversarial:
-            # import ipdb; ipdb.set_trace()
             train_pack = [(tr, attn, pr) for tr, attn, pr in zip(train_data, self.model.attn_tr, self.model.pr_tr)]
             test_pack = [(te, attn, pr) for te, attn, pr in zip(test_data, self.model.attn_te, self.model.pr_te)]
 
@@ -211,12 +210,13 @@ class Trainer(object):
                 random.shuffle(train_pack)
                 prog_iter = train_pack
             else:
-                # import ipdb; ipdb.set_trace()
                 random.shuffle(train_data)
                 prog_iter = train_data
             prog_iter = tqdm(prog_iter, leave=False)
 
             epoch_loss = 0
+            tvd_loss = 0
+            kld_loss = 0
             count = 0
             # train_batchs = list(self.train_iter)
             logger.info('Epoch %d (%d)'%(epoch + 1, int(self.model.iterations)))
@@ -225,7 +225,6 @@ class Trainer(object):
             for batch in prog_iter:
                 # Train mode
                 self.model.train()
-                    # import ipdb; ipdb.set_trace()
                 if  self.model.adversarial:
                     # pr here is the target predictions
                     data, attn, pr = batch
@@ -233,28 +232,39 @@ class Trainer(object):
                     attn = torch.from_numpy(attn).to(device)
                     pr = torch.from_numpy(pr).to(device)
                     
-                    cat_attns = []
                     self.optimizer.zero_grad()
-                    pr_loss, _ = self.model.loss(data, pr)
+
+                    pr_loss, _, attns_cur = self.model.loss(data, pr)
+
                     # log the attentions here...
 
-                    # import ipdb; ipdb.set_trace()
-                    # kl_loss = self.model.criterion(attn.log(), )
-                    pr_loss.backward()
+                    kl_loss = self.model.criterion(attn.log(), attns_cur[0])
+                    total_loss = pr_loss - self.hparams.lmbda * kl_loss
+                    # logger.info(f'total_loss: {total_loss}, kl_loss: {kl_loss}, nll_loss: {pr_loss}')
+                    total_loss.backward()
                     self.optimizer.step()
+
                     if self.lr_scheduler_step:
                         self.lr_scheduler_step.step()
-                    epoch_loss += pr_loss.item()
+
+                    epoch_loss += total_loss.item()
+                    tvd_loss += pr_loss.item()
+                    kld_loss += kl_loss.item()
+
                     count += 1
                     self.model.iterations += 1
                 
                     # Display loss
                     prog_iter.set_description('Training')
                     prog_iter.set_postfix(loss=(epoch_loss/count))
+
+                    # for hk in hooks:
+                    #     hk.remove()
+
                 else:
                     self.optimizer.zero_grad()
                     # if self.adversarial
-                    loss, _ = self.model.loss(batch)
+                    loss, _, _ = self.model.loss(batch)
                     loss.backward()
                     self.optimizer.step()
 
@@ -281,19 +291,18 @@ class Trainer(object):
             
             # train_at, train_pr = self.catch_attention(self.train_iter)
             # test_at, test_pr = self.catch_attention(self.test_iter)
-            # import ipdb; ipdb.set_trace()
             # attentions_tr = [el.tolist() for el in train_at]
             # attentions_te = [el.tolist() for el in test_at]
             # ####
             if self.lr_scheduler_epoch:
                 self.lr_scheduler_epoch.step()
 
+            logger.info(f'total_loss: {epoch_loss/count}, kl_loss: {kld_loss/count}, nll_loss: {tvd_loss/count}')
             train_loss = epoch_loss/count
             all_metrics['train_loss'].append(train_loss)
             logger.info('Train Loss: {:3.5f}'.format(train_loss))
 
             best_iteration = int(self.model.iterations)
-            # import ipdb; ipdb.set_trace()
             # Run evaluation
             if self.evaluator:
                 eval_metrics = self.evaluator.evaluate(self.model)
@@ -328,20 +337,21 @@ class Trainer(object):
                           
                         train_at, train_pr = self.catch_attention(self.train_iter)
                         test_at, test_pr = self.catch_attention(self.test_iter)
-                        # import ipdb; ipdb.set_trace()
                         # attentions_tr = [el.tolist() for el in train_at]
                         # attentions_te = [el.tolist() for el in test_at]
                         # prediction_tr = [el.tolist() for el in train_pr] 
                         # prediction_te = [el.tolist() for el in test_pr]
                         print("SAVING PREDICTIONS AND ATTENTIONS")
-                        dirname = os.path.join(self.file_path, 'saved')
+                        import datetime
+                        time = str(datetime.datetime.now().time())
+                        
+                        dirname = os.path.join('/home/zijiao/research/atal/saved_'+str(self.model.adversarial)+'_', time)
 
                         if not os.path.exists(dirname):
                             os.makedirs(dirname, mode=0o777)
                         else:
                             shutil.rmtree(dirname)
                             os.makedirs(dirname, mode=0o777)
-                        # import ipdb; ipdb.set_trace()
 
                         # json.dump(prediction_tr, open(os.path.join(dirname, '/train_predictions_best_epoch.json'), 'w'))
                         # json.dump(prediction_te, open(os.path.join(dirname, '/test_predictions_best_epoch.json'), 'w'))
@@ -399,7 +409,6 @@ class Trainer(object):
         logger.info("prediction, and attns for best epoch obtained, release hook")
         #! save it somewhere:
         # try pickle first
-        import ipdb; ipdb.set_trace()
         return attns, outputs
     # def get_attentions(self, md, inp, out):
     #     self.attentions.append(out.cpu().data.numpy())

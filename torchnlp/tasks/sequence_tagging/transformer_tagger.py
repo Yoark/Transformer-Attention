@@ -58,14 +58,15 @@ class TransformerTagger(Tagger):
                                     hparams.dropout,
                                     hparams.attention_dropout,
                                     hparams.relu_dropout,
-                                    use_mask=False
+                                    use_mask=False,
+                                    adv=hparams.adversarial
                                 )
         # ! Look
         self.adversarial = False
 
         if hparams.adversarial:
             self.adversarial = True
-            self.criterion = nn.KLDivLoss(size_average=None, reduce=None, reduction='sum')
+            self.criterion = nn.KLDivLoss(size_average=None, reduce=None, reduction='mean')
             self.lmbda = hparams.lmbda
             # ! add adv flag here to read in the attention data for future using
             self.attn_tr = load_pickle(os.path.join(hparams.attn_path, 'tr_attn_best'))
@@ -93,9 +94,9 @@ class TransformerTagger(Tagger):
             inputs_word_emb = torch.cat([inputs_word_emb, inputs_emb_char], -1)
 
         # Apply Transformer Encoder
-        enc_out = self.transformer_enc(inputs_word_emb)
+        enc_out, attns = self.transformer_enc(inputs_word_emb)
         # import ipdb; ipdb.set_trace()
-        return enc_out
+        return enc_out, attns
 
     def batch_tvd(self, predictions, targets): #accepts two Torch tensors... " "
         return (0.5 * torch.abs(predictions - targets)).sum()

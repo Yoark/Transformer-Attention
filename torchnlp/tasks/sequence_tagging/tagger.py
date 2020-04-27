@@ -86,7 +86,7 @@ class Tagger(Model):
             inputs_word, inputs_char, labels
         """
         with torch.no_grad():
-            hidden = self._embed_compute(batch)
+            hidden, _ = self._embed_compute(batch)
             output = self.output_layer(hidden)
 
         return output
@@ -99,21 +99,20 @@ class Tagger(Model):
         NOTE: batch must have the following attributes:
             inputs_word, inputs_char, labels
         """
-        hidden = self._embed_compute(batch)
+        hidden, attns = self._embed_compute(batch)
         predictions = None
         if compute_predictions:
             predictions = self.output_layer(hidden)
 
         if self.adversarial and self.training:
             # batch is (batch, attn_batch, prediction_batch)
-            # import ipdb; ipdb.set_trace()
             loss_val = self.output_layer.loss(hidden, target_pr) 
             #load predictions, do loss
             # load attns maybe outside
         else:
             loss_val = self.output_layer.loss(hidden, batch.labels)
 
-        return loss_val, predictions
+        return loss_val, predictions, attns
 
     def compute(self, inputs_word_emb, inputs_char_emb):
         """
