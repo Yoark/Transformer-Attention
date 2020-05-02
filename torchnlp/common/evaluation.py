@@ -25,9 +25,10 @@ class Evaluator(object):
         """
         self.data_iter = data_iter
         self.metrics = metrics or []
+        self.adv = adv
         if adv:
             self.adv = True
-            self.attn_te = load_pickle(os.path.join(hparams.attn_path, 'te_attn_best'))
+        self.attn_te = load_pickle(os.path.join(hparams.attn_path, 'te_attn_best'))
 
     def evaluate(self, model, froze_attn=None):
         """
@@ -51,11 +52,12 @@ class Evaluator(object):
                 data, attn_target_te = batch
                 attn_target_te = torch.from_numpy(attn_target_te).to(device)
                 loss, predictions, attn = model.loss(data, compute_predictions=True, froze_attn=froze_attn)
-                kl_loss = model.criterion(attn_target_te.log(), attn[0])
+                if self.adv:
+                    kl_loss = model.criterion(attn_target_te.log(), attn[0])
+                    kl_loss_total += float(kl_loss)                
                 for m in self.metrics:
                     m.evaluate(data, loss, predictions)
                 total_loss += float(loss)
-                kl_loss_total += float(kl_loss)                
                 prog_iter.set_description('Evaluating')
             
             results = {'loss': total_loss/len(prog_iter)}

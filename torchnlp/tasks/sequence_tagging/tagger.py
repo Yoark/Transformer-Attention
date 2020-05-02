@@ -87,6 +87,7 @@ class Tagger(Model):
         """
         with torch.no_grad():
             hidden, _ = self._embed_compute(batch, froze_attn)
+            import ipdb; ipdb.set_trace()
             output = self.output_layer(hidden)
 
         return output
@@ -100,7 +101,7 @@ class Tagger(Model):
             inputs_word, inputs_char, labels
         """
         hidden, attns = self._embed_compute(batch, froze_attn)
-
+        import ipdb; ipdb.set_trace()
         predictions = None
         if compute_predictions:
             predictions = self.output_layer(hidden)
